@@ -79,18 +79,6 @@ def best_action(state: State, epsilon: float):
         retorno = 'left'
     return retorno
 
-def calculate(state: State, action: str, gamma: float):
-    temp1 = get_next_state(state, action)
-    if(temp1 == None):
-        return 0
-    
-    temp1 = State(temp1['pos'], temp1['rot'])
-    temp2 = read_table(temp1)
-    temp3 = best_action(temp1, 0)
-    
-    return read_table(state)[action]*(1-gamma) + temp2[temp3] * gamma
-
-
 writing_table = True
 isPlaying = True
 
@@ -98,21 +86,17 @@ alpha = 0.3
 gamma = 0.95
 epsilon = 0.1
 
-
-
 #isPlaying = False
 if(isPlaying):
     s = cn.connect(2037)
     print('[ctrl+c] para encerrar a conexão\n')
 
-    pos, rot = 20, 0
+    initial = 0
+    cur_state = State(initial, 0)
+    prev_state = None
 
     for i in range(10000):
-        if random.uniform(0, 1) < epsilon:
-            action = random.choice(['jump', 'left', 'right'])  # Escolha aleatória com probabilidade ε
-        else:
-            action = best_move(pos, rot)  # Escolha com base na política greedy (1 - ε)
-
+        action = best_action(cur_state, epsilon)  # Escolha com base na política greedy (1 - ε)
 
         estado, recompensa = cn.get_state_reward(s, action)
         receivd_pos = int(estado[2:7], 2)
@@ -121,10 +105,7 @@ if(isPlaying):
         cur_state.reward = recompensa
         cur_state.action = action
 
-        
-        if(writing_table):
-            write_table(pos, rot, action, recompensa, alpha)
-        
+                
         if(recompensa == -100):
             print(f' ~ morreu: [{cur_state}] ~\n')
             if(writing_table):
@@ -134,18 +115,10 @@ if(isPlaying):
         
         print(f'[{i:04d}] estado: {cur_state} | recompensa: {"{:04d}".format(recompensa)} | {read_table(cur_state)}')
 
+        
         if(writing_table):
             write_table(cur_state, alpha)
 
-        if(prev_state == None):
-            prev_state = State(initial,0)
-        
-        prev_state.set(cur_state.pos, cur_state.rot)
-        prev_state.action = cur_state.action
-        prev_state.reward = cur_state.reward
-
-        cur_state.set(actual_pos, actual_rot)
-        cur_state.action = action
-        cur_state.rot = actual_rot
+        cur_state.set(receivd_pos, receivd_rot)
 
     print('conexão encerrada')
