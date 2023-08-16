@@ -1,14 +1,31 @@
 import connection as cn
 import random
 
-rot_ = {0: "N", 1: "L", 2: "S", 3: "O"}
-
-def hash_function(estado, rotacao):
-    hash_value = (estado * 4) + rotacao + 1
-    return hash_value
+class State:
+    def __init__ (self, pos, rot):
+        self.pos = pos
+        self.rot = rot
+        self.action = None
+        self.reward = None
+        self.enum_rot_ = {0: "N", 1: "L", 2: "S", 3: "O"}
     
-def read_table(posicao, rotacao):
-    estado = hash_function(posicao, rotacao) - 1
+    def __str__(self):
+        #return f"{self.pos:02d}:{self.enum_rot_[self.rot]}-'{self.action}':{self.reward:.{6}f}'"
+        return f"{self.pos:02d}:{self.enum_rot_[self.rot]}"
+    
+    def set(self, pos, rot):
+        self.pos = pos
+        self.rot = rot
+
+def hash_function(state: State):
+    hash_code = (state.pos * 4) + state.rot + 1
+    return hash_code
+    
+def read_table(state: State):
+    if(state == None):
+        return None
+
+    estado = hash_function(state) - 1
     
     with open("resultado.txt", "r") as table:
         linhas = table.readlines()
@@ -24,35 +41,35 @@ def read_table(posicao, rotacao):
         'right': float(valores[2]),
     }
     
-def write_table(posicao, rotacao, acao, recompensa, a):
-    estado = hash_function(posicao, rotacao) - 1
-
-    if estado < 0 or estado > 96:
+def write_table(state: State, a):
+    if(state == None):
+        return None
+    
+    index = hash_function(state) - 1
+    if index < 0 or index > 96:
         return 'out of range'
 
     with open("resultado.txt", "r") as table:
         linhas = table.readlines()
 
-    valores = linhas[estado].split(' ')
-
-    if acao == 'jump':
-        valores[0] = f"{recompensa:.{6}f}"
-    elif acao == 'left':
-        valores[1] = f"{recompensa:.{6}f}"
+    valores = linhas[index].split(' ')
+    if state.action == 'jump':
+        valores[0] = f"{state.reward:.{6}f}"
+    elif state.action == 'left':
+        valores[1] = f"{state.reward:.{6}f}"
     else:
-        valores[2] = f"{recompensa:.{6}f}"
-
-    for i in range(len(valores)):
-        val = float(valores[i])
-        valores[i] = (str(val * (1 - a) + recompensa * a))
-
-    linhas[estado] = ' '.join(valores) + '\n'
+        valores[2] = f"{state.reward:.{6}f}\n"
 
     with open("resultado.txt", "w") as table:
+        linhas[index] = ' '.join(valores)
         table.writelines(linhas)
 
-def best_move(posicao, rotacao):
-    valores = read_table(posicao, rotacao)
+def best_action(state: State, epsilon: float):
+
+    if random.uniform(0, 1) < epsilon:
+        return random.choice(['jump', 'left', 'right'])  # Escolhe aleatório
+
+    valores = read_table(state)
     left, right, jump = float(valores['left']), float(valores['right']), float(valores['jump'])
 
     retorno = 'jump'
@@ -65,42 +82,58 @@ def best_move(posicao, rotacao):
 
 
 writing_table = True
-playing = False
-playing = True
+isPlaying = True
+
 alpha = 0.3
 gamma = 0.95
 epsilon = 0.1
 
 
 
-if(playing):
-    s = cn.connect(157)
+#isPlaying = False
+if(isPlaying):
+    s = cn.connect(2037)
     print('[ctrl+c] para encerrar a conexão\n')
 
-    pos, rot = 20, 0
+    initial = 21
+    cur_state = State(initial, 0)
+    prev_state = None
 
-    for i in range(10000):
-        if random.uniform(0, 1) < epsilon:
-            action = random.choice(['jump', 'left', 'right'])  # Escolha aleatória com probabilidade ε
-        else:
-            action = best_move(pos, rot)  # Escolha com base na política greedy (1 - ε)
-
+    for i in range(5000):
+        action = best_action(cur_state, epsilon)
+        #action = 'jump'
 
         estado, recompensa = cn.get_state_reward(s, action)
         actual_pos = int(estado[2:7], 2)
         actual_rot = int(estado[7:9], 2)
 
-        
+        cur_state.reward = recompensa
+        #cur_state.action = action
+
         if(writing_table):
-            write_table(pos, rot, action, recompensa, alpha)
+            write_table(cur_state, alpha)
         
         if(recompensa == -100):
-            print(f'\n ~ morreu: = [{pos}][{rot}-{rot_[rot]}] ~\n')
-        else:
-            print(f'[{i:04d}] estado: {"{:02d}".format(pos)}-{rot_[rot]} | recompensa: {"{:04d}".format(recompensa)} | {action} | [{estado}]')
+            print(f' ~ morreu: [{cur_state}] ~\n')
+            if(writing_table):
+                write_table(cur_state, alpha)
+            cur_state = State(initial, 0)
+            continue
+        
+        print(f'[{i:04d}] estado: {cur_state} | recompensa: {"{:04d}".format(recompensa)} | {read_table(cur_state)}')
 
-        pos, rot= actual_pos, actual_rot        
+        if(writing_table):
+            write_table(cur_state, alpha)
 
+        if(prev_state == None):
+            prev_state = State(initial,0)
+        
+        prev_state.set(cur_state.pos, cur_state.rot)
+        prev_state.action = cur_state.action
+        prev_state.reward = cur_state.reward
 
-    s.close()
+        cur_state.set(actual_pos, actual_rot)
+        cur_state.action = action
+        cur_state.rot = actual_rot
+
     print('conexão encerrada')
