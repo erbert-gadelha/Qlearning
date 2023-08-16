@@ -79,6 +79,16 @@ def best_action(state: State, epsilon: float):
         retorno = 'left'
     return retorno
 
+def calculate(state: State, action: str, gamma: float):
+    temp1 = get_next_state(state, action)
+    if(temp1 == None):
+        return 0
+    
+    temp1 = State(temp1['pos'], temp1['rot'])
+    temp2 = read_table(temp1)
+    temp3 = best_action(temp1, 0)
+    
+    return read_table(state)[action]*(1-gamma) + temp2[temp3] * gamma
 
 
 writing_table = True
@@ -95,23 +105,25 @@ if(isPlaying):
     s = cn.connect(2037)
     print('[ctrl+c] para encerrar a conexão\n')
 
-    initial = 21
-    cur_state = State(initial, 0)
-    prev_state = None
+    pos, rot = 20, 0
 
-    for i in range(5000):
-        action = best_action(cur_state, epsilon)
-        #action = 'jump'
+    for i in range(10000):
+        if random.uniform(0, 1) < epsilon:
+            action = random.choice(['jump', 'left', 'right'])  # Escolha aleatória com probabilidade ε
+        else:
+            action = best_move(pos, rot)  # Escolha com base na política greedy (1 - ε)
+
 
         estado, recompensa = cn.get_state_reward(s, action)
-        actual_pos = int(estado[2:7], 2)
-        actual_rot = int(estado[7:9], 2)
+        receivd_pos = int(estado[2:7], 2)
+        receivd_rot = int(estado[7:9], 2)
 
         cur_state.reward = recompensa
-        #cur_state.action = action
+        cur_state.action = action
 
+        
         if(writing_table):
-            write_table(cur_state, alpha)
+            write_table(pos, rot, action, recompensa, alpha)
         
         if(recompensa == -100):
             print(f' ~ morreu: [{cur_state}] ~\n')
